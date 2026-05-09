@@ -32,6 +32,31 @@ Complete the account/password, captcha, and slider login in the browser. The con
 
 Stop the login container after it prints that the login state was saved.
 
+If the page cannot be opened, run:
+
+```bash
+cd /opt/gongxin-monitor
+bash scripts/diagnose-vnc-centos.sh
+```
+
+If the diagnostic says local noVNC is reachable but your browser cannot open `http://SERVER_IP:6080/vnc.html`, open TCP `6080` in both the cloud security group and the server firewall:
+
+```bash
+sudo bash scripts/open-vnc-firewall-centos.sh
+```
+
+A safer alternative is SSH tunneling, which avoids exposing port `6080` publicly:
+
+```bash
+ssh -L 6080:127.0.0.1:6080 root@SERVER_IP
+```
+
+Then open:
+
+```text
+http://127.0.0.1:6080/vnc.html
+```
+
 ## Login State Option B: Upload Existing State
 
 Generate `data/storage_state.json` from any machine that can complete login, then upload it to:
