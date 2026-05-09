@@ -10,7 +10,7 @@
     "monitor": "node src/monitor.js"
   },
   "dependencies": {
-    "playwright": "^1.53.0"
+    "playwright": "1.59.1"
   },
   "engines": {
     "node": ">=20"

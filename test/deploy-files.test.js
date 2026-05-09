@@ -15,3 +15,12 @@ test('diagnose script checks container, localhost, and firewall layers', async (
   assert.match(script, /curl -fsSI http:\/\/127\.0\.0\.1:6080\/vnc\.html/);
   assert.match(script, /firewall-cmd --list-ports/);
 });
+
+test('Dockerfile Playwright image version matches pinned package dependency', async () => {
+  const dockerfile = await readFile('Dockerfile', 'utf8');
+  const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
+  const playwrightVersion = packageJson.dependencies.playwright;
+
+  assert.match(playwrightVersion, /^\d+\.\d+\.\d+$/);
+  assert.match(dockerfile, new RegExp(`mcr\\.microsoft\\.com/playwright:v${playwrightVersion}-noble`));
+});
