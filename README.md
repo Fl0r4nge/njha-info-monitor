@@ -1,87 +1,63 @@
-# 工信平台状态巡检 MVP
+# njha-info-monitor
 
-这个项目用于在 CentOS 云服务器上定时巡检“南京市中小企业数字化转型城市试点线上一体化公共服务平台”的改造项目流程状态。状态发生变化时，通过飞书自定义机器人 Webhook 推送消息。
+南京市中小企业数字化转型城市试点线上一体化公共服务平台流程状态监控工具。
 
-## 工作方式
+## 功能
 
-1. 人工完成一次账号密码登录和滑块验证。
-2. Playwright 保存登录态到 `data/storage_state.json`。
-3. systemd timer 定时运行巡检脚本。
-4. 脚本读取项目列表，和上次 `data/projects_snapshot.json` 对比。
-5. 只有项目新增、消失或流程状态字段变化时，才推送飞书消息。
-6. 如果登录态失效，推送“需要人工重新登录”的异常提醒。
+- 使用 Playwright 复用人工登录态访问平台。
+- 定时进入个人中心的“改造项目管理”页面。
+- 读取企业名称、项目阶段、流程状态、行业、服务商和时间。
+- 与上一次快照对比，仅在状态变化时推送飞书流程 Webhook。
+- 登录态失效时推送异常提醒。
+- 支持 Docker + cron 一键部署到 CentOS 云服务器。
 
-## 本地配置
+## 最简部署
 
-复制示例配置：
-
-```bash
-cp config.example.json config.json
-cp .env.example .env
-```
-
-需要修改：
-
-- `config.json` 中的 `loginUrl` 和 `projectUrl`
-- `config.json` 中 `selectors.projectRows` 和 `selectors.fields`
-- `.env` 中的 `FEISHU_WEBHOOK_URL`
-
-选择器需要按真实页面调整。建议在浏览器开发者工具里定位“改造项目管理”的表格行和状态字段。
-
-## 手动登录
-
-在有图形界面的环境中运行：
+上传项目到 CentOS 后执行：
 
 ```bash
-npm run login
+sudo FEISHU_WEBHOOK_URL="https://www.feishu.cn/flow/api/trigger-webhook/your-token" bash scripts/quick-deploy-centos.sh
 ```
 
-在 CentOS 云服务器上，推荐用 `Xvfb + noVNC`、VNC 桌面，或临时带桌面的 SSH 会话完成首次登录。登录成功后回到终端按 Enter，脚本会保存登录态。
-
-## 手动巡检
+生成登录态：
 
 ```bash
-npm run monitor
+cd /opt/gongxin-monitor
+docker compose up login
 ```
 
-首次巡检会生成快照。之后只有状态变化才会推送飞书。
+然后打开：
 
-## CentOS 部署
+```text
+http://服务器IP:6080/vnc.html
+```
 
-安装 Node.js 20+ 后，在项目目录执行：
+在浏览器中完成平台账号、验证码和滑块登录。登录成功后会保存：
+
+```text
+/opt/gongxin-monitor/data/storage_state.json
+```
+
+手动巡检一次：
 
 ```bash
-chmod +x deploy/install-centos.sh
-sudo deploy/install-centos.sh
+cd /opt/gongxin-monitor
+docker compose run --rm monitor
 ```
 
-然后修改服务器上的配置：
+查看日志：
 
 ```bash
-sudo vi /opt/gongxin-monitor/config.json
-sudo vi /opt/gongxin-monitor/.env
+tail -f /opt/gongxin-monitor/monitor.log
 ```
 
-完成手动登录后启用定时任务：
+更详细说明见 [docs/ONE_CLICK_DOCKER.md](docs/ONE_CLICK_DOCKER.md)。
 
-```bash
-sudo systemctl enable --now gongxin-monitor.timer
-```
+## 配置文件
 
-查看运行状态和日志：
-
-```bash
-systemctl list-timers gongxin-monitor.timer
-journalctl -u gongxin-monitor.service -n 100 --no-pager
-```
-
-## 飞书机器人
-
-在飞书群里添加“自定义机器人”，复制 Webhook 地址到 `.env`：
-
-```bash
-FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxxx
-```
-
-如果机器人开启了签名校验，当前 MVP 暂未实现签名。建议先使用关键词校验或关闭签名，等流程跑通后再补签名支持。
+- `.env`：飞书 Webhook 和配置路径，不能提交。
+- `config.json`：真实平台配置和企业名称，不能提交。
+- `config.example.json`：可提交的示例配置。
+- `data/storage_state.json`：登录态，不能提交。
+- `data/projects_snapshot.json`：上一次巡检快照，不能提交。
 
