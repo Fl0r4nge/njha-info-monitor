@@ -15,3 +15,18 @@ export async function isLoginComplete(page, config = {}) {
 
   return false;
 }
+
+export async function isLoginExpired(page, config = {}) {
+  if (config.loginExpiredSelector && await page.locator(config.loginExpiredSelector).count() > 0) {
+    return true;
+  }
+
+  const url = page.url();
+  const patterns = config.loginExpiredUrlPatterns || ['/login', '/ui/#/login'];
+  if (patterns.some((pattern) => url.includes(pattern))) {
+    return true;
+  }
+
+  const loginPath = config.loginUrl ? new URL(config.loginUrl).pathname : '';
+  return Boolean(loginPath && loginPath !== '/' && url.includes(loginPath));
+}

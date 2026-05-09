@@ -2,6 +2,7 @@ import { loadConfig } from './config.js';
 import { openBrowserContext } from './browser.js';
 import { diffProjects } from './diff.js';
 import { buildFeishuFlowPayload, buildLoginExpiredMessage, sendFeishuWebhook } from './feishu.js';
+import { isLoginExpired } from './login-state.js';
 import { extractProjects } from './scraper.js';
 import { runNavigationSteps } from './navigation.js';
 import { JsonSnapshotStore } from './store.js';
@@ -41,15 +42,6 @@ async function main() {
   } finally {
     await browser.close();
   }
-}
-
-async function isLoginExpired(page, config) {
-  if (config.loginExpiredSelector && await page.locator(config.loginExpiredSelector).count() > 0) {
-    return true;
-  }
-
-  const url = page.url();
-  return config.loginUrl && url.includes(new URL(config.loginUrl).pathname);
 }
 
 main().catch((error) => {

@@ -7,6 +7,10 @@
   "snapshotPath": "./data/projects_snapshot.json",
   "timeoutMs": 30000,
   "loginExpiredSelector": "form input[type=\"password\"]",
+  "loginExpiredUrlPatterns": [
+    "/login",
+    "/ui/#/login"
+  ],
   "navigationSteps": [
     {
       "selector": ".el-submenu__title:has-text(\"改造项目管理\")"
