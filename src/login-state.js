@@ -17,16 +17,36 @@ export async function isLoginComplete(page, config = {}) {
 }
 
 export async function isLoginExpired(page, config = {}) {
-  if (config.loginExpiredSelector && await page.locator(config.loginExpiredSelector).count() > 0) {
-    return true;
+  return Boolean(await getLoginExpiredReason(page, config));
+}
+
+export async function getLoginExpiredReason(page, config = {}) {
+  const url = page.url();
+
+  if (config.loginExpiredSelector && await hasVisibleMatch(page.locator(config.loginExpiredSelector))) {
+    return `visible login selector found: ${config.loginExpiredSelector}; url=${url}`;
   }
 
-  const url = page.url();
   const patterns = config.loginExpiredUrlPatterns || ['/login', '/ui/#/login'];
   if (patterns.some((pattern) => url.includes(pattern))) {
-    return true;
+    return `login URL pattern matched; url=${url}`;
   }
 
   const loginPath = config.loginUrl ? new URL(config.loginUrl).pathname : '';
-  return Boolean(loginPath && loginPath !== '/' && url.includes(loginPath));
+  if (loginPath && loginPath !== '/' && url.includes(loginPath)) {
+    return `login path matched; path=${loginPath}; url=${url}`;
+  }
+
+  return '';
+}
+
+async function hasVisibleMatch(locator) {
+  const count = await locator.count();
+  for (let index = 0; index < count; index += 1) {
+    if (await locator.nth(index).isVisible()) {
+      return true;
+    }
+  }
+
+  return false;
 }

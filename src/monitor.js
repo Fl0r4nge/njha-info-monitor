@@ -2,7 +2,7 @@ import { loadConfig } from './config.js';
 import { openBrowserContext } from './browser.js';
 import { diffProjects } from './diff.js';
 import { buildFeishuFlowPayload, buildLoginExpiredMessage, sendFeishuWebhook } from './feishu.js';
-import { isLoginExpired } from './login-state.js';
+import { getLoginExpiredReason } from './login-state.js';
 import { extractProjects } from './scraper.js';
 import { runNavigationSteps } from './navigation.js';
 import { JsonSnapshotStore } from './store.js';
@@ -20,7 +20,9 @@ async function main() {
     const page = await context.newPage();
     await page.goto(config.projectUrl, { waitUntil: 'domcontentloaded' });
 
-    if (await isLoginExpired(page, config)) {
+    const loginExpiredReason = await getLoginExpiredReason(page, config);
+    if (loginExpiredReason) {
+      console.log(`Login state check failed: ${loginExpiredReason}`);
       await sendFeishuWebhook(config.feishuWebhookUrl, buildLoginExpiredMessage(config.enterpriseName));
       throw new Error('Login state expired');
     }
