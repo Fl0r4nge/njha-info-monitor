@@ -24,3 +24,11 @@ test('Dockerfile Playwright image version matches pinned package dependency', as
   assert.match(playwrightVersion, /^\d+\.\d+\.\d+$/);
   assert.match(dockerfile, new RegExp(`mcr\\.microsoft\\.com/playwright:v${playwrightVersion}-noble`));
 });
+
+test('repository forces shell scripts to use LF line endings', async () => {
+  const attributes = await readFile('.gitattributes', 'utf8');
+  const dockerfile = await readFile('Dockerfile', 'utf8');
+
+  assert.match(attributes, /\*\.sh text eol=lf/);
+  assert.match(dockerfile, /sed -i 's\/\\r\$\/\/' docker\/\*\.sh/);
+});

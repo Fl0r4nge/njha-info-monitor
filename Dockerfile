@@ -15,6 +15,7 @@ COPY src ./src
 COPY docker ./docker
 COPY config.example.json ./config.example.json
 
+RUN sed -i 's/\r$//' docker/*.sh
 RUN mkdir -p /app/data
 
 CMD ["node", "src/monitor.js"]
