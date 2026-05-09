@@ -1,0 +1,28 @@
+services:
+  monitor:
+    build: .
+    image: gongxin-monitor:latest
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+    restart: "no"
+  login:
+    build: .
+    image: gongxin-monitor:latest
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      LOGIN_AUTO_SAVE: "1"
+      LOGIN_TIMEOUT_MS: "900000"
+      DISPLAY: ":99"
+    ports:
+      - "6080:6080"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+    command: ["bash", "/app/docker/login-vnc.sh"]
+    restart: "no"

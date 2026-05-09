@@ -1,0 +1,43 @@
+{
+  "platformName": "南京市中小企业数字化转型城市试点线上一体化公共服务平台",
+  "enterpriseName": "示例企业有限公司",
+  "loginUrl": "http://180.101.239.176:9443/",
+  "projectUrl": "http://180.101.239.176:9443/personal",
+  "storageStatePath": "./data/storage_state.json",
+  "snapshotPath": "./data/projects_snapshot.json",
+  "timeoutMs": 30000,
+  "loginExpiredSelector": "form input[type=\"password\"]",
+  "navigationSteps": [
+    {
+      "selector": ".el-submenu__title:has-text(\"改造项目管理\")"
+    },
+    {
+      "selector": ".el-menu-item:has-text(\"改造项目管理\")"
+    }
+  ],
+  "selectors": {
+    "projectRows": ".el-table__body-wrapper table.el-table__body tbody tr",
+    "fields": {
+      "name": "td:nth-child(2)",
+      "enterprise": "td:nth-child(2)",
+      "step": "td:nth-child(3)",
+      "status": "td:nth-child(4)",
+      "industry": "td:nth-child(5)",
+      "provider": "td:nth-child(6)",
+      "updatedAt": "td:nth-child(7)",
+      "endedAt": "td:nth-child(8)"
+    },
+    "detailUrl": "td:nth-child(9) a"
+  },
+  "compareFields": [
+    "name",
+    "enterprise",
+    "status",
+    "step",
+    "industry",
+    "provider",
+    "updatedAt",
+    "endedAt",
+    "detailUrl"
+  ]
+}

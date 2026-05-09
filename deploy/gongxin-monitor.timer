@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Gongxin platform status monitor every 10 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Unit=gongxin-monitor.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,18 @@
+{
+  "name": "gongxin-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "test:feishu": "node src/feishu-smoke.js",
+    "login": "node src/login.js",
+    "monitor": "node src/monitor.js"
+  },
+  "dependencies": {
+    "playwright": "^1.53.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
