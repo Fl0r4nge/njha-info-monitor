@@ -10,7 +10,12 @@ import {
   PLATFORM_ENDPOINTS,
 } from '../src/platform/api-client.js';
 import { pickList, pickField } from '../src/platform/collect.js';
-import { safeFileName, findAttachments } from '../src/platform/attachments.js';
+import {
+  assertDownloadedFile,
+  findAttachments,
+  normalizeAttachmentUrl,
+  safeFileName,
+} from '../src/platform/attachments.js';
 import {
   shouldReallySend,
   summarizePayload,
@@ -137,6 +142,18 @@ test('findAttachments 递归识别并去重', () => {
 
 test('findAttachments 不把普通字符串当成文件', () => {
   assert.deepEqual(findAttachments({ entName: '南京鸿光环境科技有限公司' }), []);
+});
+
+test('平台相对附件路径补齐 API 前缀，并拒绝伪装成 PDF 的 HTML', () => {
+  assert.equal(
+    normalizeAttachmentUrl('ad/upload/财务报表/file/pdf/example.pdf'),
+    '/api/ad/upload/财务报表/file/pdf/example.pdf',
+  );
+  assert.doesNotThrow(() => assertDownloadedFile(Buffer.from('%PDF-1.7'), '财务报表.pdf'));
+  assert.throws(
+    () => assertDownloadedFile(Buffer.from('<!DOCTYPE html>'), '财务报表.pdf'),
+    /HTML 页面|不是有效的 PDF/,
+  );
 });
 
 // ---------- push（高风险守卫）----------

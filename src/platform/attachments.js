@@ -39,6 +39,29 @@ export function safeFileName(name, fallback = 'attachment') {
   return cleaned || fallback;
 }
 
+/** 平台数据库中的 filePath 省略了统一网关的 /api 前缀。 */
+export function normalizeAttachmentUrl(url) {
+  const value = String(url || '').trim();
+  if (/^https?:\/\//i.test(value) || value.startsWith('/api/')) return value;
+  if (value.startsWith('api/')) return `/${value}`;
+  if (/^\/?(?:ad|sa)\/upload\//i.test(value)) {
+    return `/api/${value.replace(/^\/+/, '')}`;
+  }
+  return value;
+}
+
+/** 防止登录页或 SPA HTML 被按原扩展名写入并回灌为“PDF”。 */
+export function assertDownloadedFile(buffer, fileName) {
+  if (!buffer || buffer.length === 0) throw new Error('下载到 0 字节');
+  const head = buffer.subarray(0, 16).toString('ascii').trimStart();
+  if (/^<!DOCTYPE|^<html/i.test(head)) {
+    throw new Error(`${fileName} 下载结果是 HTML 页面，不是有效附件`);
+  }
+  if (/\.pdf$/i.test(fileName) && !buffer.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+    throw new Error(`${fileName} 不是有效的 PDF 文件`);
+  }
+}
+
 /**
  * 递归扫描任意 JSON，找出候选附件。
  * @returns {Array<{name, url, sourcePath, guessedFrom, confidence}>}
@@ -113,8 +136,8 @@ export async function downloadAttachments(api, attachments, targetDir, { onProgr
 
     const targetPath = join(targetDir, name);
     try {
-      const buffer = await api.download(attachment.url);
-      if (!buffer || buffer.length === 0) throw new Error('下载到 0 字节');
+      const buffer = await api.download(normalizeAttachmentUrl(attachment.url));
+      assertDownloadedFile(buffer, name);
       await writeFile(targetPath, buffer);
       results.push({ ...attachment, savedAs: targetPath, size: buffer.length, ok: true });
     } catch (error) {
