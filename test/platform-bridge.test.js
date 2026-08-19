@@ -303,6 +303,13 @@ test('平台附件按明确文件名映射到收集系统条目', () => {
   assert.equal(mapAttachmentToItem({ name: '投入发票及银行回单.pdf' }).itemKey, 'C6');
   assert.equal(mapAttachmentToItem({ name: '申报资料真实性声明.pdf' }).itemKey, 'E6');
   assert.equal(mapAttachmentToItem({ name: '改造前数字化水平自评测报告.pdf' }).itemKey, 'H1');
+  assert.equal(
+    mapAttachmentToItem({
+      name: '鸿光环境2024.pdf',
+      sourcePath: 'apply.details[0].detail.financialStatementsResource[0].filePath',
+    }).itemKey,
+    'C1',
+  );
 });
 
 test('低置信附件只建议归类，不自动带 itemKey', () => {

@@ -156,6 +156,7 @@ export const PLATFORM_TO_ITEM = [
  * 只有文件名语义足够明确时才给 itemKey；其余只给 suggestedItemKey 或留空，避免错挂。
  */
 export const PLATFORM_ATTACHMENT_RULES = [
+  { itemKey: 'C1', label: '近两年利润表或财务报表', pattern: /(financialStatementsResource|财务.*(报表|审计)|利润表|资产负债表|现金流量表)/i },
   { itemKey: 'H1', label: '改造前自评测报告', pattern: /改造前.*(自评|评测).*报告/i },
   { itemKey: 'H2', label: '改造后自评测报告', pattern: /改造后.*(自评|评测).*报告/i },
   { itemKey: 'C7', label: '投入清单明细表', pattern: /投入.*(清单|明细)/i },
