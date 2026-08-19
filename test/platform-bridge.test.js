@@ -244,6 +244,30 @@ test('buildResponsePlan 命中字段时产出 A 类的 {value} 结构', () => {
   assert.ok(a1.value.value.includes('南京鸿光环境科技有限公司'));
 });
 
+test('buildResponsePlan 从真实数字化评测结构回退提取企业资料', () => {
+  const plan = buildResponsePlan({
+    archive: {
+      basic: {},
+      digitalData: {
+        unitName: '南京鸿光环境科技有限公司',
+        socialUnitCreditCode: '913201XXXX',
+        unitAddress: '南京市江宁区示例路1号',
+        unitLxr: '联系人',
+        unitCellphone: '13800000000',
+        basicInfo: '水质监测智慧化解决方案企业',
+        ownCity: '江宁区',
+      },
+    },
+  });
+  const values = Object.fromEntries(plan.map((entry) => [entry.itemKey, entry.value?.value]));
+
+  assert.equal(values.A1, '南京鸿光环境科技有限公司　913201XXXX');
+  assert.equal(values.A2, '南京市江宁区示例路1号');
+  assert.equal(values.A3, '联系人 13800000000');
+  assert.equal(values.A4, '水质监测智慧化解决方案企业');
+  assert.equal(values.A10, '江宁区');
+});
+
 test('buildResponsePlan 保留数值 0，不把零值当成空', () => {
   const plan = buildResponsePlan({
     archive: { basic: { employeeNum: 0, lastYearEmployeeNum: 12 } },

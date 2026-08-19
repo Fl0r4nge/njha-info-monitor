@@ -38,8 +38,9 @@ export const PLATFORM_TO_ITEM = [
     itemKey: 'A1',
     label: '企业全称与统一社会信用代码',
     source: 'archive.basic',
-    candidatePaths: ['entName', 'enterpriseName', 'companyName', 'name'],
-    extraPaths: ['creditCode', 'socialCreditCode', 'unifiedSocialCreditCode', 'uscc'],
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['entName', 'enterpriseName', 'companyName', 'name', 'unitName'],
+    extraPaths: ['creditCode', 'socialCreditCode', 'unifiedSocialCreditCode', 'uscc', 'socialUnitCreditCode'],
     confidence: 'medium',
     compose: (name, code) => joinPresent([name, code], '　'),
   },
@@ -47,7 +48,8 @@ export const PLATFORM_TO_ITEM = [
     itemKey: 'A2',
     label: '企业地址、成立时间',
     source: 'archive.basic',
-    candidatePaths: ['registerAddress', 'address', 'regAddress', 'entAddress'],
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['registerAddress', 'address', 'regAddress', 'entAddress', 'unitAddress', 'productionAddress'],
     extraPaths: ['establishDate', 'setupDate', 'foundDate', 'establishTime'],
     confidence: 'medium',
     compose: (addr, date) => joinPresent([addr, date], '　成立于 '),
@@ -56,8 +58,9 @@ export const PLATFORM_TO_ITEM = [
     itemKey: 'A3',
     label: '联系人姓名与电话',
     source: 'archive.basic',
-    candidatePaths: ['contactName', 'linkman', 'contacts', 'contactPerson'],
-    extraPaths: ['contactPhone', 'phone', 'mobile', 'linkPhone'],
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['contactName', 'linkman', 'contacts', 'contactPerson', 'unitLxr'],
+    extraPaths: ['contactPhone', 'phone', 'mobile', 'linkPhone', 'unitCellphone'],
     confidence: 'medium',
     compose: (nm, phone) => joinPresent([nm, phone], ' '),
   },
@@ -65,7 +68,8 @@ export const PLATFORM_TO_ITEM = [
     itemKey: 'A4',
     label: '主营产品与所属行业',
     source: 'archive.basic',
-    candidatePaths: ['mainProduct', 'mainProducts', 'product', 'majorProduct'],
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['mainProduct', 'mainProducts', 'product', 'majorProduct', 'basicInfo'],
     extraPaths: ['industry', 'industryName', 'trade'],
     confidence: 'low',
     compose: (product, industry) => joinPresent([product, industry], '　行业：'),
@@ -106,7 +110,8 @@ export const PLATFORM_TO_ITEM = [
     itemKey: 'A10',
     label: '所属行政区',
     source: 'archive.basic',
-    candidatePaths: ['areaName', 'district', 'regionName', 'area'],
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['areaName', 'district', 'regionName', 'area', 'ownCity'],
     confidence: 'medium',
   },
   {
@@ -209,9 +214,23 @@ export function buildResponsePlan(collected) {
   const plan = [];
 
   for (const rule of PLATFORM_TO_ITEM) {
-    const source = readSource(collected, rule.source);
-    const primary = extractByCandidates(source, rule.candidatePaths);
-    const extra = rule.extraPaths ? extractByCandidates(source, rule.extraPaths) : undefined;
+    const sourcePaths = [rule.source, ...(rule.fallbackSources || [])];
+    let matchedSource = rule.source;
+    let primary;
+    let extra;
+    for (const sourcePath of sourcePaths) {
+      const source = readSource(collected, sourcePath);
+      const candidate = extractByCandidates(source, rule.candidatePaths);
+      const candidateExtra = rule.extraPaths
+        ? extractByCandidates(source, rule.extraPaths)
+        : undefined;
+      if (candidate !== undefined || candidateExtra !== undefined) {
+        matchedSource = sourcePath;
+        primary = candidate;
+        extra = candidateExtra;
+        break;
+      }
+    }
     const raw = rule.compose ? rule.compose(primary, extra) : primary;
 
     if (raw === undefined || raw === '' || raw === null) {
@@ -219,7 +238,7 @@ export function buildResponsePlan(collected) {
         itemKey: rule.itemKey,
         label: rule.label,
         value: null,
-        source: rule.source,
+        source: matchedSource,
         confidence: rule.confidence,
         note: '候选字段全部落空，需用 raw-responses.json 校正 candidatePaths',
       });
@@ -230,7 +249,7 @@ export function buildResponsePlan(collected) {
       itemKey: rule.itemKey,
       label: rule.label,
       value: { value: asText(raw) },
-      source: rule.source,
+      source: matchedSource,
       confidence: rule.confidence,
       note: '',
     });
