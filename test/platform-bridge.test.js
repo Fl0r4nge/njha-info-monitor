@@ -6,6 +6,7 @@ import {
   fillPathParams,
   buildQuery,
   buildTokenHeaderCandidates,
+  createApiClient,
   PLATFORM_ENDPOINTS,
 } from '../src/platform/api-client.js';
 import { pickList, pickField } from '../src/platform/collect.js';
@@ -68,6 +69,26 @@ test('buildTokenHeaderCandidates 从 localStorage 里挑候选鉴权头', () => 
   assert.ok(candidates.length >= 4);
   assert.ok(candidates.some((c) => c.headers.Authorization === 'abcdefghijklmnopqrstuvwxyz'));
   assert.ok(candidates.some((c) => c.headers.Authorization?.startsWith('Bearer ')));
+});
+
+test('业务返回 code=401 时切换 localStorage 令牌并重试', async () => {
+  const token = 'abcdefghijklmnopqrstuvwxyz';
+  const requests = [];
+  const page = {
+    evaluate: async (_fn, args) => {
+      if (!args) return { 'Admin-Token': token };
+      requests.push(args);
+      if (args.headers.Authorization === token) {
+        return { ok: true, status: 200, text: JSON.stringify({ code: 200, data: { ok: true } }) };
+      }
+      return { ok: true, status: 200, text: JSON.stringify({ code: 401, msg: 'token失效' }) };
+    },
+  };
+  const api = createApiClient({ page, context: {}, baseUrl: 'https://example.test', minIntervalMs: 0 });
+
+  assert.deepEqual(await api.get('archiveBasic'), { ok: true });
+  assert.equal(requests.length, 2);
+  assert.equal(api.authMode, 'Admin-Token');
 });
 
 test('写入类端点都带 danger 标记', () => {

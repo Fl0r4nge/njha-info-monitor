@@ -66,6 +66,11 @@ export const PLATFORM_ENDPOINTS = {
 
 /** 平台返回体里代表成功的 code 取值。平台各接口并不统一，这里放宽兼容。 */
 const SUCCESS_CODES = new Set([0, 200, '0', '200', 'success', 'SUCCESS', true]);
+const AUTH_FAILURE_CODES = new Set([401, 403, '401', '403']);
+
+function isAuthFailureEnvelope(body) {
+  return Boolean(body && typeof body === 'object' && AUTH_FAILURE_CODES.has(body.code));
+}
 
 /** 解析 {code,msg,data} 信封；平台也有直接返回数组/对象的接口，两种都要能拿到载荷。 */
 export function parseEnvelope(body, contextLabel = '') {
@@ -236,6 +241,14 @@ export function createApiClient({ page, context, baseUrl, logger = console, minI
           auth: auth.source,
           body: parsedBody,
         });
+
+        // 此平台会用 HTTP 200 包裹业务层 code=401/403。它与真正的 HTTP
+        // 401/403 含义相同：当前鉴权头不可用，应继续尝试 localStorage 候选令牌。
+        if (isAuthFailureEnvelope(parsedBody)) {
+          const message = parsedBody.msg || parsedBody.message || '令牌失效';
+          lastError = new Error(`${contextLabel} 鉴权失败：code=${parsedBody.code} msg=${message}（鉴权方式：${auth.source}）`);
+          break;
+        }
 
         if (auth.source !== workingAuth.source) {
           logger.log?.(`[api] 鉴权方式切换为 ${auth.source}`);
