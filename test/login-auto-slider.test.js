@@ -1,7 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { solveEnterpriseSlider } from '../src/login.js';
+import { persistStorageState, solveEnterpriseSlider } from '../src/login.js';
+
+test('login storage state is persisted once and the saved value is returned', async () => {
+  const expected = { cookies: [{ name: 'session', value: 'saved' }], origins: [] };
+  const calls = [];
+  const context = {
+    storageState: async (options) => {
+      calls.push(options);
+      return expected;
+    },
+  };
+
+  const result = await persistStorageState(context, '/tmp/gongxin-test/storage_state.json');
+
+  assert.equal(result, expected);
+  assert.deepEqual(calls, [{ path: '/tmp/gongxin-test/storage_state.json' }]);
+});
 
 test('enterprise slider is attempted automatically and retried without an opt-in flag', async () => {
   let attempts = 0;

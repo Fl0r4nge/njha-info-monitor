@@ -45,13 +45,17 @@ export async function loginAndSave(config, credentials, options = {}) {
       rl.close();
     }
 
-    await mkdir(dirname(config.storageStatePath), { recursive: true });
-    await context.storageState({ path: config.storageStatePath });
+    const storageState = await persistStorageState(context, config.storageStatePath);
     console.log(`登录态已保存到 ${config.storageStatePath}`);
-    return context.storageState();
+    return storageState;
   } finally {
     await browser.close();
   }
+}
+
+export async function persistStorageState(context, storageStatePath) {
+  await mkdir(dirname(storageStatePath), { recursive: true });
+  return context.storageState({ path: storageStatePath });
 }
 
 async function main() {
