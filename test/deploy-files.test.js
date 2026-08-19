@@ -8,6 +8,21 @@ test('login-vnc binds noVNC to all interfaces inside the container', async () =>
   assert.match(script, /0\.0\.0\.0:6080/);
 });
 
+test('headless agent starts without exposing VNC and manual fallback stays isolated', async () => {
+  const script = await readFile('docker/agent-vnc.sh', 'utf8');
+  const compose = await readFile('docker-compose.yml', 'utf8');
+
+  assert.match(script, /VNC_PASSWORD is required/);
+  assert.match(script, /-passwd "\$\{VNC_PASSWORD\}"/);
+  assert.match(script, /node src\/agent\.js --watch/);
+  assert.match(compose, /agent:\n(?:.|\n)*?command: \["node", "src\/agent\.js", "--watch"\]/);
+  assert.doesNotMatch(
+    compose.match(/agent:\n([\s\S]*?)(?=\n  agent-vnc:)/)?.[1] ?? '',
+    /ports:|agent-vnc\.sh/,
+  );
+  assert.match(compose, /agent-vnc:\n(?:.|\n)*?profiles:\n\s+- manual/);
+});
+
 test('diagnose script checks container, localhost, and firewall layers', async () => {
   const script = await readFile('scripts/diagnose-vnc-centos.sh', 'utf8');
 
