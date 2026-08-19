@@ -273,6 +273,11 @@ test('buildResponsePlan 从真实数字化评测结构回退提取企业资料',
         unitCellphone: '13800000000',
         basicInfo: '水质监测智慧化解决方案企业',
         ownCity: '江宁区',
+        subdivideIndustry: '2',
+        enterpriseNature: '2',
+        enterSize: 2,
+        enterSizeName: '2',
+        enterpriseSituation: '1',
       },
     },
   });
@@ -283,6 +288,27 @@ test('buildResponsePlan 从真实数字化评测结构回退提取企业资料',
   assert.equal(values.A3, '联系人 13800000000');
   assert.equal(values.A4, '水质监测智慧化解决方案企业');
   assert.equal(values.A10, '江宁区');
+  assert.equal(values.A11, '智能制造装备');
+  assert.equal(values.A12, '民营');
+  assert.equal(values.A13, '小型企业');
+  assert.equal(values.A14, '规模以下企业');
+  assert.equal(values.A15, '无');
+});
+
+test('buildResponsePlan 不把未知平台枚举代码写入佐证系统', () => {
+  const plan = buildResponsePlan({
+    archive: { digitalData: { subdivideIndustry: '99' } },
+  });
+  const a11 = plan.find((entry) => entry.itemKey === 'A11');
+  assert.equal(a11.value, null);
+});
+
+test('buildResponsePlan 保留平台已返回的中文枚举值', () => {
+  const plan = buildResponsePlan({
+    archive: { basic: { enterpriseNature: '混合所有制' } },
+  });
+  const a12 = plan.find((entry) => entry.itemKey === 'A12');
+  assert.equal(a12.value.value, '混合所有制');
 });
 
 test('buildResponsePlan 保留数值 0，不把零值当成空', () => {

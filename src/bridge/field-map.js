@@ -1,11 +1,8 @@
 /**
  * 平台字段 → 佐证材料收集系统条目（itemKey）的映射，以及回灌计划的生成。
  *
- * ⚠️ 关键前提：**平台接口返回体的字段名尚未用真实数据验证过**。
- * 盘点文档只写了"能拿到什么内容"，没有字段名。所以这里每条映射都给多个
- * candidatePaths（候选路径）和 confidence，取不到就记 note，绝不让"猜错一个字段名"
- * 变成整体失败。首次跑通 platform:collect 后，请用 data/raw-responses.json 里的
- * 真实字段名回来校正本文件，并把 confidence 提到 high。
+ * 已用真实平台返回体校正企业档案的常用字段。仍保留多个 candidatePaths（候选路径）
+ * 兼容平台不同接口的结构；取不到时只记 note，不让单个字段影响整次同步。
  *
  * itemKey 取自 server/modules/materials/checklist-seed.ts，均为真实存在的条目：
  *   A1 企业全称与统一社会信用代码 / A2 企业地址、成立时间 / A3 联系人姓名与电话
@@ -32,6 +29,42 @@ const asText = (v) => (typeof v === 'string' ? v.trim() : String(v));
 const joinPresent = (values, separator) => values
   .filter((value) => value !== undefined && value !== null && value !== '')
   .join(separator);
+
+const SUBDIVIDE_INDUSTRY = {
+  1: '智能电网',
+  2: '智能制造装备',
+  3: '集成电路',
+};
+const ENTERPRISE_NATURE = {
+  1: '国有',
+  2: '民营',
+  3: '外资',
+  4: '混合所有制',
+  5: '其他',
+};
+const ENTERPRISE_SCALE = {
+  1: '微型企业',
+  2: '小型企业',
+  3: '中型企业',
+};
+const STATISTICAL_SCALE = {
+  1: '规模以上企业',
+  2: '规模以下企业',
+};
+const QUALITY_SME = {
+  1: '无',
+  2: '创新型中小企业',
+  3: '专精特新中小企业',
+  4: '专精特新“小巨人”企业',
+};
+
+/** 平台接口返回枚举代码，管理页面显示中文；未知代码不回灌，避免把内部代码写入材料。 */
+export function decodePlatformEnum(value, dictionary) {
+  if (value === undefined || value === null || value === '') return undefined;
+  const normalized = String(value).trim();
+  if (Object.hasOwn(dictionary, normalized)) return dictionary[normalized];
+  return Object.values(dictionary).includes(normalized) ? normalized : undefined;
+}
 
 export const PLATFORM_TO_ITEM = [
   {
@@ -118,36 +151,50 @@ export const PLATFORM_TO_ITEM = [
     itemKey: 'A11',
     label: '所属细分行业',
     source: 'archive.basic',
-    candidatePaths: ['subIndustry', 'industryDetail', 'subIndustryName', 'industryName'],
-    confidence: 'low',
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['subdivideIndustry', 'subIndustry', 'industryDetail', 'subIndustryName', 'industryName'],
+    confidence: 'high',
+    transform: (value) => decodePlatformEnum(value, SUBDIVIDE_INDUSTRY),
   },
   {
     itemKey: 'A12',
     label: '企业性质',
     source: 'archive.basic',
-    candidatePaths: ['entNature', 'nature', 'companyType', 'entType'],
-    confidence: 'low',
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['enterpriseNature', 'entNature', 'nature', 'companyType', 'entType'],
+    extraPaths: ['enterpriseNatureOther'],
+    confidence: 'high',
+    transform: (value, { extra }) => {
+      const label = decodePlatformEnum(value, ENTERPRISE_NATURE);
+      return label === '其他' && extra ? `其他（${asText(extra)}）` : label;
+    },
   },
   {
     itemKey: 'A13',
     label: '企业规模',
     source: 'archive.basic',
-    candidatePaths: ['entScale', 'scale', 'enterpriseScale', 'scaleName'],
-    confidence: 'low',
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['enterSize', 'entScale', 'scale', 'enterpriseScale', 'scaleName'],
+    confidence: 'high',
+    transform: (value) => decodePlatformEnum(value, ENTERPRISE_SCALE),
   },
   {
     itemKey: 'A14',
     label: '统计口径（规模以上/以下）',
     source: 'archive.basic',
-    candidatePaths: ['statCaliber', 'aboveScale', 'statisticalScale'],
-    confidence: 'low',
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['enterSizeName', 'statCaliber', 'aboveScale', 'statisticalScale'],
+    confidence: 'high',
+    transform: (value) => decodePlatformEnum(value, STATISTICAL_SCALE),
   },
   {
     itemKey: 'A15',
     label: '优质中小企业情况',
     source: 'archive.basic',
-    candidatePaths: ['qualitySmeType', 'highQualityType', 'enterpriseQualification', 'smeType'],
-    confidence: 'low',
+    fallbackSources: ['archive.digitalData', 'apply.details.0.detail'],
+    candidatePaths: ['enterpriseSituation', 'qualitySmeType', 'highQualityType', 'enterpriseQualification', 'smeType'],
+    confidence: 'high',
+    transform: (value) => decodePlatformEnum(value, QUALITY_SME),
   },
 ];
 
@@ -232,7 +279,10 @@ export function buildResponsePlan(collected) {
         break;
       }
     }
-    const raw = rule.compose ? rule.compose(primary, extra) : primary;
+    const composed = rule.compose ? rule.compose(primary, extra) : primary;
+    const raw = rule.transform
+      ? rule.transform(composed, { primary, extra, source: matchedSource })
+      : composed;
 
     if (raw === undefined || raw === '' || raw === null) {
       plan.push({
