@@ -7,10 +7,17 @@
     "test": "node --test",
     "test:feishu": "node src/feishu-smoke.js",
     "login": "node src/login.js",
-    "monitor": "node src/monitor.js"
+    "query": "node src/query.js",
+    "monitor": "node src/monitor.js",
+    "platform:collect": "node src/cli.js collect",
+    "platform:files": "node src/cli.js files",
+    "bridge:plan": "node src/cli.js plan",
+    "bridge:apply": "node src/cli.js apply",
+    "platform:push": "node src/cli.js push"
   },
   "dependencies": {
-    "playwright": "1.59.1"
+    "playwright": "1.59.1",
+    "pngjs": "7.0.0"
   },
   "engines": {
     "node": ">=20"
