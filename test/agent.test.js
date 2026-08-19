@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAgentClient } from '../src/agent-client.js';
-import { buildJobConfig, importInbound } from '../src/agent.js';
+import { buildJobConfig, importInbound, omitDetails } from '../src/agent.js';
 
 test('buildJobConfig keeps configured paths but switches platform origin and account state', () => {
   const config = buildJobConfig(
@@ -98,4 +98,11 @@ test('inbound result keeps item-level audit details', async () => {
   );
   assert.equal(result.details[0].source, 'archive.digitalData');
   assert.match(result.details[0].valuePreview, /测试企业/);
+});
+
+test('process log summary omits item details', () => {
+  assert.deepEqual(
+    omitDetails({ imported: 1, skipped: 2, details: [{ itemKey: 'A1' }] }),
+    { imported: 1, skipped: 2 },
+  );
 });

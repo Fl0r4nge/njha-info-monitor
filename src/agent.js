@@ -77,6 +77,12 @@ function previewValue(value) {
   return String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
 }
 
+export function omitDetails(result) {
+  const counts = { ...result };
+  delete counts.details;
+  return counts;
+}
+
 export async function importInbound(client, job, collected, attachments) {
   if (!['inbound', 'bidirectional'].includes(job.direction)) {
     return {
@@ -255,7 +261,11 @@ export async function processJob(client, baseConfig, job) {
       errorMessage: partial ? outbound.note : undefined,
       sessionState: result.sessionState,
     });
-    return { status: partial ? 'partial' : 'success', inbound, outbound };
+    return {
+      status: partial ? 'partial' : 'success',
+      inbound: omitDetails(inbound),
+      outbound: omitDetails(outbound),
+    };
   } catch (error) {
     const verification = isLoginStateError(error);
     await client.complete(job.runId, job.runToken, {
