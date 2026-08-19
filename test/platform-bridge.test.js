@@ -20,14 +20,17 @@ import {
 import {
   planChunks,
   assertUploadResult,
+  createCollectClient,
   COLLECT_CHUNK_BYTES,
 } from '../src/bridge/collect-system.js';
 import {
   extractByCandidates,
   buildResponsePlan,
   buildImportPlan,
+  mapAttachmentToItem,
   PLATFORM_TO_ITEM,
 } from '../src/bridge/field-map.js';
+import { buildPlatformExportPlan } from '../src/bridge/platform-export.js';
 import { isTrueFlag } from '../src/cli.js';
 
 // ---------- api-client ----------
@@ -177,6 +180,19 @@ test('assertUploadResult 没有 id 就判失败（防网关假成功）', () => 
   assert.throws(() => assertUploadResult(200, '<html>', 'a.pdf'), /上传未生效/);
 });
 
+test('管理侧文件下载拒绝外部地址，避免泄露管理密钥', async () => {
+  const client = createCollectClient({
+    baseUrl: 'https://collect.example/app/app_x',
+    slug: 'demo',
+    adminKey: 'secret',
+    fetchImpl: async () => { throw new Error('不应发出请求'); },
+  });
+  await assert.rejects(
+    () => client.downloadManifestFile('https://evil.example/file.pdf'),
+    /拒绝下载非本系统导出地址/,
+  );
+});
+
 // ---------- 字段映射与回灌计划 ----------
 
 test('extractByCandidates 按候选路径依次尝试', () => {
@@ -207,6 +223,14 @@ test('buildResponsePlan 命中字段时产出 A 类的 {value} 结构', () => {
   assert.ok(a1.value.value.includes('南京鸿光环境科技有限公司'));
 });
 
+test('buildResponsePlan 保留数值 0，不把零值当成空', () => {
+  const plan = buildResponsePlan({
+    archive: { basic: { employeeNum: 0, lastYearEmployeeNum: 12 } },
+  });
+  const a5 = plan.find((entry) => entry.itemKey === 'A5');
+  assert.equal(a5.value.value, '0 / 12');
+});
+
 test('buildImportPlan 不覆盖本系统已有的不同内容', () => {
   const collected = { archive: { basic: { entName: '鸿光' } } };
   const checklist = {
@@ -227,6 +251,92 @@ test('buildImportPlan 对本系统没有的条目记入 skipped', () => {
   });
   assert.ok(plan.skipped.some((s) => s.itemKey === 'A1'));
   assert.equal(plan.responses.length, 0);
+});
+
+test('平台附件按明确文件名映射到收集系统条目', () => {
+  assert.equal(mapAttachmentToItem({ name: '数字化改造合同.pdf' }).itemKey, 'C5');
+  assert.equal(mapAttachmentToItem({ name: '投入发票及银行回单.pdf' }).itemKey, 'C6');
+  assert.equal(mapAttachmentToItem({ name: '申报资料真实性声明.pdf' }).itemKey, 'E6');
+  assert.equal(mapAttachmentToItem({ name: '改造前数字化水平自评测报告.pdf' }).itemKey, 'H1');
+});
+
+test('低置信附件只建议归类，不自动带 itemKey', () => {
+  const mapped = mapAttachmentToItem({ name: '数字化项目实施方案.pdf' });
+  assert.equal(mapped.itemKey, null);
+  assert.equal(mapped.suggestedItemKey, 'E5');
+});
+
+test('buildImportPlan 跳过同一条目已有的同名同大小附件', () => {
+  const plan = buildImportPlan({
+    collected: { archive: { basic: {} } },
+    checklist: {
+      items: [
+        {
+          itemKey: 'C5',
+          textValue: null,
+          files: [{ fileName: '数字化改造合同.pdf', size: 1024 }],
+        },
+      ],
+    },
+    attachments: [
+      {
+        name: '数字化改造合同.pdf',
+        savedAs: 'data/attachments/数字化改造合同.pdf',
+        size: 1024,
+        ok: true,
+      },
+    ],
+  });
+  assert.equal(plan.files.length, 0);
+  assert.equal(plan.skippedFiles.length, 1);
+  assert.match(plan.skippedFiles[0].reason, /重复上传/);
+});
+
+test('反向导出只包含有平台落点的最终版文件，并排除 A9 密码', () => {
+  const plan = buildPlatformExportPlan({
+    project: { id: 'p1', name: '示例企业' },
+    categories: [
+      {
+        key: 'A',
+        name: '基本信息',
+        items: [
+          { item_key: 'A1', name: '企业信息', text_value: { value: '示例企业' }, files: [] },
+          { item_key: 'A9', name: '系统账号', text_value: { value: 'secret' }, files: [] },
+        ],
+      },
+      {
+        key: 'C',
+        name: '财务材料',
+        items: [
+          {
+            item_key: 'C5',
+            name: '数字化改造合同',
+            text_value: null,
+            files: [
+              {
+                upload_id: 'u-final',
+                file_name: '合同-final.pdf',
+                stage: 'final',
+                download_url: '/api/export/p1/file/u-final',
+              },
+              {
+                upload_id: 'u-draft',
+                file_name: '合同-draft.pdf',
+                stage: 'draft',
+                download_url: '/api/export/p1/file/u-draft',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(plan.values.length, 1);
+  assert.equal(plan.values[0].itemKey, 'A1');
+  assert.equal(plan.files.length, 1);
+  assert.equal(plan.files[0].uploadId, 'u-final');
+  assert.ok(plan.skipped.some((entry) => entry.itemKey === 'A9'));
+  assert.ok(plan.skipped.some((entry) => entry.fileName === '合同-draft.pdf'));
 });
 
 // ---------- CLI 开关 ----------

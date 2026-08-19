@@ -21,6 +21,10 @@ import { findAttachments, downloadAttachments } from './platform/attachments.js'
 import { uploadFileToPlatform } from './platform/push.js';
 import { createCollectClient } from './bridge/collect-system.js';
 import { buildImportPlan, applyImportPlan } from './bridge/field-map.js';
+import {
+  buildPlatformExportPlan,
+  stagePlatformExport,
+} from './bridge/platform-export.js';
 
 const DATA_DIR = './data';
 
@@ -59,11 +63,14 @@ async function writeJson(path, payload) {
   return path;
 }
 
-function collectClientFromEnv() {
+function collectClientFromEnv({ requireSlug = true } = {}) {
   const baseUrl = process.env.COLLECT_BASE_URL;
   const slug = process.env.COLLECT_SLUG;
-  if (!baseUrl || !slug) {
-    throw new Error('缺少环境变量 COLLECT_BASE_URL / COLLECT_SLUG（见 .env.example）');
+  if (!baseUrl || (requireSlug && !slug)) {
+    const required = requireSlug
+      ? 'COLLECT_BASE_URL / COLLECT_SLUG'
+      : 'COLLECT_BASE_URL';
+    throw new Error(`缺少环境变量 ${required}（见 .env.example）`);
   }
   return createCollectClient({
     baseUrl,
@@ -122,11 +129,34 @@ const commands = {
 
     console.log(`回灌计划已生成 → ${target}`);
     console.log(`  可写入 ${plan.responses.length} 项，冲突 ${plan.conflicts.length} 项，` +
-      `跳过 ${plan.skipped.length} 项，附件 ${plan.files.length} 个`);
+      `跳过 ${plan.skipped.length} 项，附件 ${plan.files.length} 个，` +
+      `重复附件 ${plan.skippedFiles.length} 个`);
     for (const conflict of plan.conflicts) {
       console.log(`  [冲突] ${conflict.itemKey} ${conflict.label}：本系统已有不同内容，默认不覆盖`);
     }
     console.log('确认无误后执行：npm run bridge:apply -- --apply');
+  },
+
+  /** 从收集系统拉取可用于一体化平台填报的数据与最终版附件。 */
+  async export(_config, args) {
+    const client = collectClientFromEnv({ requireSlug: false });
+    const project = args.project || process.env.COLLECT_PROJECT || process.env.COLLECT_SLUG;
+    if (!project) {
+      throw new Error('缺少 --project 或 COLLECT_PROJECT（也可复用 COLLECT_SLUG）');
+    }
+    const manifest = await client.getManifest(project);
+    const plan = buildPlatformExportPlan(manifest);
+    const targetDir = join(DATA_DIR, 'to-platform');
+    const stagedFiles = await stagePlatformExport(client, plan, targetDir, {
+      onProgress: (done, total, name) => console.log(`  [${done}/${total}] ${name}`),
+    });
+    const exported = { ...plan, files: stagedFiles };
+    const target = await writeJson(join(DATA_DIR, 'platform-export-plan.json'), exported);
+    const ok = stagedFiles.filter((file) => file.ok).length;
+    console.log(`平台待办包已生成 → ${target}`);
+    console.log(`  可预填字段 ${plan.values.length} 项，附件 ${ok}/${stagedFiles.length} 个，` +
+      `安全跳过 ${plan.skipped.length} 项`);
+    console.log('字段只生成待核对计划；正式平台提交仍需人工确认。');
   },
 
   async apply(_config, args) {
@@ -173,9 +203,11 @@ async function main() {
   files     下载平台附件
   plan      生成回灌到佐证材料收集系统的计划（不写入）
   apply     执行回灌，需 --apply
+  export    从收集系统生成一体化平台待办包，可用 --project 指定项目
   push      把本地文件上传到平台，需 --confirm I-UNDERSTAND
 
-所有命令都要求已有平台登录态（先跑 npm run login）。`);
+collect / files / push 要求已有平台登录态（先跑 npm run login）；
+plan / apply / export 只连接佐证材料收集系统。`);
     return;
   }
 

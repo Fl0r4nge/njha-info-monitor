@@ -29,6 +29,9 @@ export function extractByCandidates(source, candidatePaths = []) {
 
 /** A 类条目是纯文本填写，值形态为 { value: string } */
 const asText = (v) => (typeof v === 'string' ? v.trim() : String(v));
+const joinPresent = (values, separator) => values
+  .filter((value) => value !== undefined && value !== null && value !== '')
+  .join(separator);
 
 export const PLATFORM_TO_ITEM = [
   {
@@ -38,7 +41,7 @@ export const PLATFORM_TO_ITEM = [
     candidatePaths: ['entName', 'enterpriseName', 'companyName', 'name'],
     extraPaths: ['creditCode', 'socialCreditCode', 'unifiedSocialCreditCode', 'uscc'],
     confidence: 'medium',
-    compose: (name, code) => [name, code].filter(Boolean).join('　'),
+    compose: (name, code) => joinPresent([name, code], '　'),
   },
   {
     itemKey: 'A2',
@@ -47,7 +50,7 @@ export const PLATFORM_TO_ITEM = [
     candidatePaths: ['registerAddress', 'address', 'regAddress', 'entAddress'],
     extraPaths: ['establishDate', 'setupDate', 'foundDate', 'establishTime'],
     confidence: 'medium',
-    compose: (addr, date) => [addr, date].filter(Boolean).join('　成立于 '),
+    compose: (addr, date) => joinPresent([addr, date], '　成立于 '),
   },
   {
     itemKey: 'A3',
@@ -56,7 +59,7 @@ export const PLATFORM_TO_ITEM = [
     candidatePaths: ['contactName', 'linkman', 'contacts', 'contactPerson'],
     extraPaths: ['contactPhone', 'phone', 'mobile', 'linkPhone'],
     confidence: 'medium',
-    compose: (nm, phone) => [nm, phone].filter(Boolean).join(' '),
+    compose: (nm, phone) => joinPresent([nm, phone], ' '),
   },
   {
     itemKey: 'A4',
@@ -65,7 +68,39 @@ export const PLATFORM_TO_ITEM = [
     candidatePaths: ['mainProduct', 'mainProducts', 'product', 'majorProduct'],
     extraPaths: ['industry', 'industryName', 'trade'],
     confidence: 'low',
-    compose: (product, industry) => [product, industry].filter(Boolean).join('　行业：'),
+    compose: (product, industry) => joinPresent([product, industry], '　行业：'),
+  },
+  {
+    itemKey: 'A5',
+    label: '近两年员工人数',
+    source: 'archive.basic',
+    candidatePaths: ['employeeNum', 'staffNum', 'employeeCount', 'employees'],
+    extraPaths: ['lastYearEmployeeNum', 'employeeNumLastYear', 'previousEmployeeCount'],
+    confidence: 'low',
+    compose: (current, previous) => joinPresent([current, previous], ' / '),
+  },
+  {
+    itemKey: 'A6',
+    label: '项目名称、合同起止日期、服务商名称',
+    source: 'projects.projects.0',
+    candidatePaths: ['projectName', 'name', 'pmpName'],
+    extraPaths: ['providerName', 'serviceProviderName', 'provider'],
+    confidence: 'low',
+    compose: (project, provider) => joinPresent([project, provider], '　服务商：'),
+  },
+  {
+    itemKey: 'A7',
+    label: '数字化改造完成时间',
+    source: 'archive.transInfo',
+    candidatePaths: ['transEndDate', 'endDate', 'finishDate', 'completeDate', 'onlineDate'],
+    confidence: 'low',
+  },
+  {
+    itemKey: 'A8',
+    label: '本次合同改造范围清单',
+    source: 'archive.transInfo',
+    candidatePaths: ['transContent', 'transformContent', 'constructionContent', 'content'],
+    confidence: 'low',
   },
   {
     itemKey: 'A10',
@@ -102,7 +137,55 @@ export const PLATFORM_TO_ITEM = [
     candidatePaths: ['statCaliber', 'aboveScale', 'statisticalScale'],
     confidence: 'low',
   },
+  {
+    itemKey: 'A15',
+    label: '优质中小企业情况',
+    source: 'archive.basic',
+    candidatePaths: ['qualitySmeType', 'highQualityType', 'enterpriseQualification', 'smeType'],
+    confidence: 'low',
+  },
 ];
+
+/**
+ * 平台附件 → 收集系统材料槽位。
+ * 只有文件名语义足够明确时才给 itemKey；其余只给 suggestedItemKey 或留空，避免错挂。
+ */
+export const PLATFORM_ATTACHMENT_RULES = [
+  { itemKey: 'H1', label: '改造前自评测报告', pattern: /改造前.*(自评|评测).*报告/i },
+  { itemKey: 'H2', label: '改造后自评测报告', pattern: /改造后.*(自评|评测).*报告/i },
+  { itemKey: 'C7', label: '投入清单明细表', pattern: /投入.*(清单|明细)/i },
+  { itemKey: 'E6', label: '佐证材料真实性声明', pattern: /(申报资料|佐证材料).*真实性声明/i },
+  { itemKey: 'E5', label: '备案或验收材料', pattern: /(备案表|验收申请表|验收书)/i },
+  { itemKey: 'C6', label: '发票或付款凭证', pattern: /(发票|付款凭证|支付凭证|银行回单|公对公)/i },
+  { itemKey: 'C5', label: '数字化改造合同', pattern: /(数字化|改造|转型).*(合同)|合同.*(数字化|改造|转型)/i },
+];
+
+export function mapAttachmentToItem(attachment) {
+  const searchable = [attachment?.name, attachment?.sourcePath, attachment?.guessedFrom]
+    .filter(Boolean)
+    .join(' ');
+  for (const rule of PLATFORM_ATTACHMENT_RULES) {
+    if (rule.pattern.test(searchable)) {
+      return {
+        itemKey: rule.itemKey,
+        label: rule.label,
+        confidence: 'high',
+      };
+    }
+  }
+
+  // 实施方案通常与项目备案一起出现，但 E5 的正式定义是备案表/验收申请表，
+  // 因此只建议、不自动挂载。
+  if (/实施方案/i.test(searchable)) {
+    return {
+      itemKey: null,
+      suggestedItemKey: 'E5',
+      label: '项目实施方案（建议人工确认是否归入 E5）',
+      confidence: 'low',
+    };
+  }
+  return { itemKey: null, label: '', confidence: 'none' };
+}
 
 /** B0 改造前评测结果数据的六个子字段，来源是"改造情况与改造前成效"接口 */
 export const B0_FIELD_MAP = {
@@ -213,16 +296,45 @@ export function buildImportPlan({ collected, checklist, attachments = [] }) {
     responses.push(entry);
   }
 
-  const files = attachments
-    .filter((a) => a.ok !== false)
-    .map((a) => ({
-      fileName: a.name,
-      savedAs: a.savedAs,
-      itemKey: a.itemKey ?? null,
-      note: a.itemKey ? '' : '未能自动判断归属条目，需人工指定 itemKey 后才会上传',
-    }));
+  const files = [];
+  const skippedFiles = [];
+  for (const attachment of attachments.filter((entry) => entry.ok !== false)) {
+    const mapped = attachment.itemKey
+      ? { itemKey: attachment.itemKey, label: '', confidence: 'manual' }
+      : mapAttachmentToItem(attachment);
+    const file = {
+      fileName: attachment.name,
+      savedAs: attachment.savedAs,
+      size: attachment.size,
+      itemKey: mapped.itemKey ?? null,
+      suggestedItemKey: mapped.suggestedItemKey ?? null,
+      confidence: mapped.confidence,
+      sourcePath: attachment.sourcePath,
+      note: mapped.itemKey
+        ? `按文件名识别为「${mapped.label || mapped.itemKey}」，写入前请复核`
+        : mapped.suggestedItemKey
+          ? mapped.label
+          : '未能自动判断归属条目，需人工指定 itemKey 后才会上传',
+    };
 
-  return { responses, conflicts, skipped, files };
+    if (!file.itemKey) {
+      files.push(file);
+      continue;
+    }
+    const existingFiles = items.get(file.itemKey)?.files ?? [];
+    const duplicate = existingFiles.some((existing) => {
+      const sameName = existing.fileName === file.fileName;
+      const sameSize = !file.size || !existing.size || Number(existing.size) === Number(file.size);
+      return sameName && sameSize;
+    });
+    if (duplicate) {
+      skippedFiles.push({ ...file, reason: '本系统同一条目已有同名同大小文件，跳过重复上传' });
+      continue;
+    }
+    files.push(file);
+  }
+
+  return { responses, conflicts, skipped, files, skippedFiles };
 }
 
 /** 执行回灌。apply 默认 false，只演练。 */

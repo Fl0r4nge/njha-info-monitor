@@ -174,6 +174,24 @@ export function createCollectClient({ baseUrl, slug, accessCode, adminKey, fetch
       return body;
     },
 
+    /**
+     * 按 manifest 下发的管理侧地址下载文件。
+     * 只接受本系统 /api/export/ 路径，避免把管理密钥带到外部地址。
+     */
+    async downloadManifestFile(downloadUrl) {
+      if (!adminKey) throw new Error('downloadManifestFile 需要管理密钥 adminKey');
+      if (typeof downloadUrl !== 'string' || !downloadUrl.startsWith('/api/export/')) {
+        throw new Error(`拒绝下载非本系统导出地址：${String(downloadUrl)}`);
+      }
+      const res = await fetchImpl(`${root}${downloadUrl}`, {
+        headers: baseHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error(`导出文件下载失败 HTTP ${res.status}（${downloadUrl}）`);
+      }
+      return Buffer.from(await res.arrayBuffer());
+    },
+
     /** 下载本系统里的某个文件（用于反向推送到平台） */
     async downloadUpload(uploadId) {
       const res = await fetchImpl(

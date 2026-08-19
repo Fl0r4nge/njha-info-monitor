@@ -26,3 +26,32 @@ services:
       - ./data:/app/data
     command: ["bash", "/app/docker/login-vnc.sh"]
     restart: "no"
+  agent:
+    build: .
+    image: gongxin-monitor:latest
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+    command: ["node", "src/agent.js", "--watch"]
+    restart: unless-stopped
+  agent-vnc:
+    profiles:
+      - manual
+    build: .
+    image: gongxin-monitor:latest
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      DISPLAY: ":99"
+      PLATFORM_AGENT_HEADLESS: "0"
+    ports:
+      - "6080:6080"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+    command: ["bash", "/app/docker/agent-vnc.sh"]
+    restart: "no"

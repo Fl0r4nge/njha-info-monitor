@@ -13,7 +13,10 @@
     "platform:files": "node src/cli.js files",
     "bridge:plan": "node src/cli.js plan",
     "bridge:apply": "node src/cli.js apply",
-    "platform:push": "node src/cli.js push"
+    "bridge:export": "node src/cli.js export",
+    "platform:push": "node src/cli.js push",
+    "agent:run": "node src/agent.js",
+    "agent:watch": "node src/agent.js --watch"
   },
   "dependencies": {
     "playwright": "1.59.1",
