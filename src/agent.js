@@ -69,19 +69,75 @@ async function ensureCollected(config, job) {
   }
 }
 
-async function importInbound(client, job, collected, attachments) {
+function previewValue(value) {
+  const candidate = value && typeof value === 'object' && 'value' in value
+    ? value.value
+    : value;
+  const text = typeof candidate === 'string' ? candidate : JSON.stringify(candidate);
+  return String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+export async function importInbound(client, job, collected, attachments) {
   if (!['inbound', 'bidirectional'].includes(job.direction)) {
-    return { values: { imported: 0, skipped: 0 }, files: { imported: 0, skipped: 0, failed: 0 } };
+    return {
+      values: { imported: 0, skipped: 0 },
+      files: { imported: 0, skipped: 0, failed: 0 },
+      details: [],
+    };
   }
-  const entries = buildResponsePlan(collected)
-    .filter((entry) => entry.value !== null)
-    .map((entry) => ({ itemKey: entry.itemKey, value: entry.value }));
-  const values = await client.importValues(job.runId, job.runToken, entries);
+  const plannedEntries = buildResponsePlan(collected)
+    .filter((entry) => entry.value !== null);
+  const entries = plannedEntries.map((entry) => ({
+    itemKey: entry.itemKey,
+    value: entry.value,
+  }));
+  const valueResult = await client.importValues(job.runId, job.runToken, entries);
+  const planByItem = new Map(plannedEntries.map((entry) => [entry.itemKey, entry]));
+  const valueDetails = (valueResult.details || []).map((detail) => {
+    const planned = planByItem.get(detail.itemKey);
+    return {
+      direction: 'inbound',
+      kind: 'value',
+      status: detail.status,
+      itemKey: detail.itemKey,
+      label: detail.label || planned?.label || detail.itemKey,
+      source: planned?.source,
+      valuePreview: planned ? previewValue(planned.value) : undefined,
+      reason: detail.reason,
+    };
+  });
+  const values = { imported: valueResult.imported, skipped: valueResult.skipped };
   const files = { imported: 0, skipped: 0, failed: 0 };
-  for (const attachment of attachments.filter((item) => item.ok)) {
+  const fileDetails = [];
+  for (const attachment of attachments) {
     const mapped = mapAttachmentToItem(attachment);
+    if (!attachment.ok) {
+      files.failed += 1;
+      fileDetails.push({
+        direction: 'inbound',
+        kind: 'file',
+        status: 'failed',
+        itemKey: mapped.itemKey || null,
+        label: mapped.label || '平台附件',
+        fileName: attachment.name,
+        reason: attachment.error || '附件下载失败',
+      });
+      continue;
+    }
     if (!mapped.itemKey) {
       files.skipped += 1;
+      fileDetails.push({
+        direction: 'inbound',
+        kind: 'file',
+        status: 'skipped',
+        itemKey: null,
+        label: mapped.label || '未匹配清单项',
+        fileName: attachment.name,
+        size: attachment.size,
+        reason: mapped.suggestedItemKey
+          ? `仅建议归入 ${mapped.suggestedItemKey}，需人工确认`
+          : '未找到可信的自动归类规则',
+      });
       continue;
     }
     try {
@@ -94,18 +150,50 @@ async function importInbound(client, job, collected, attachments) {
         buffer,
         undefined,
       );
-      if (result?.skipped) files.skipped += 1;
-      else files.imported += 1;
-    } catch {
+      if (result?.skipped) {
+        files.skipped += 1;
+        fileDetails.push({
+          direction: 'inbound',
+          kind: 'file',
+          status: 'skipped',
+          itemKey: mapped.itemKey,
+          label: mapped.label,
+          fileName: attachment.name,
+          size: attachment.size,
+          reason: result.reason === 'duplicate' ? '同名同大小文件已存在' : '系统跳过该文件',
+        });
+      } else {
+        files.imported += 1;
+        fileDetails.push({
+          direction: 'inbound',
+          kind: 'file',
+          status: 'imported',
+          itemKey: mapped.itemKey,
+          label: mapped.label,
+          fileName: attachment.name,
+          size: attachment.size,
+        });
+      }
+    } catch (error) {
       files.failed += 1;
+      fileDetails.push({
+        direction: 'inbound',
+        kind: 'file',
+        status: 'failed',
+        itemKey: mapped.itemKey,
+        label: mapped.label,
+        fileName: attachment.name,
+        size: attachment.size,
+        reason: error.message || String(error),
+      });
     }
   }
-  return { values, files };
+  return { values, files, details: [...valueDetails, ...fileDetails] };
 }
 
 async function stageOutbound(client, job, targetDir) {
   if (!['outbound', 'bidirectional'].includes(job.direction)) {
-    return { values: 0, files: 0, prepared: 0, applied: true };
+    return { values: 0, files: 0, prepared: 0, applied: true, details: [] };
   }
   await mkdir(targetDir, { recursive: true });
   let prepared = 0;
@@ -125,6 +213,26 @@ async function stageOutbound(client, job, targetDir) {
     files: job.outbound.files.length,
     prepared,
     applied: job.outbound.values.length === 0 && job.outbound.files.length === 0,
+    details: [
+      ...job.outbound.values.map((value) => ({
+        direction: 'outbound',
+        kind: 'value',
+        status: 'prepared',
+        itemKey: value.itemKey,
+        label: value.itemKey,
+        reason: '已生成待推送数据，未提交正式申报',
+      })),
+      ...job.outbound.files.map((file) => ({
+        direction: 'outbound',
+        kind: 'file',
+        status: 'prepared',
+        itemKey: file.itemKey,
+        label: file.itemKey,
+        fileName: file.fileName,
+        size: file.size,
+        reason: '已下载到执行端待推送目录，未提交正式申报',
+      })),
+    ],
     note: '平台写接口字段和附件归属尚未用真实企业返回体校准，已安全生成待推送包，未盲目提交正式申报。',
   };
 }
@@ -142,6 +250,7 @@ export async function processJob(client, baseConfig, job) {
         inbound,
         outbound,
         warnings: result.collected.warnings.length,
+        details: [...inbound.details, ...outbound.details],
       },
       errorMessage: partial ? outbound.note : undefined,
       sessionState: result.sessionState,

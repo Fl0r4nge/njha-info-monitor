@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAgentClient } from '../src/agent-client.js';
-import { buildJobConfig } from '../src/agent.js';
+import { buildJobConfig, importInbound } from '../src/agent.js';
 
 test('buildJobConfig keeps configured paths but switches platform origin and account state', () => {
   const config = buildJobConfig(
@@ -57,4 +57,45 @@ test('agent run requests and file downloads keep the matching CSRF pair', async 
   assert.equal(calls[0].options.headers['X-Platform-Run-Token'], 'run-secret');
   assert.equal(calls[0].options.headers['X-Suda-Csrf-Token'], 'csrf-download');
   assert.equal(calls[0].options.headers.Cookie, 'suda-csrf-token=csrf-download');
+});
+
+test('inbound result keeps item-level audit details', async () => {
+  const client = {
+    importValues: async (_runId, _runToken, entries) => ({
+      imported: 1,
+      skipped: entries.length - 1,
+      details: entries.map((entry, index) => ({
+        itemKey: entry.itemKey,
+        label: entry.itemKey,
+        status: index === 0 ? 'imported' : 'skipped',
+        reason: index === 0 ? undefined : '系统中已有内容，未覆盖人工数据',
+      })),
+    }),
+  };
+  const collected = {
+    archive: {
+      basic: {},
+      digitalData: {
+        unitName: '测试企业',
+        socialUnitCreditCode: '913201TEST',
+        unitAddress: '南京市江宁区',
+        ownCity: '江宁区',
+      },
+    },
+  };
+
+  const result = await importInbound(
+    client,
+    { runId: 'run-1', runToken: 'token-1', direction: 'inbound' },
+    collected,
+    [],
+  );
+
+  assert.equal(result.details.length, 3);
+  assert.deepEqual(
+    result.details.map((detail) => detail.itemKey),
+    ['A1', 'A2', 'A10'],
+  );
+  assert.equal(result.details[0].source, 'archive.digitalData');
+  assert.match(result.details[0].valuePreview, /测试企业/);
 });
